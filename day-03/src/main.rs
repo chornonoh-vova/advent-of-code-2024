@@ -1,125 +1,51 @@
-use std::path::Path;
-
 fn read_instructions<P>(filename: P) -> std::io::Result<String>
 where
-    P: AsRef<Path>,
+    P: AsRef<std::path::Path>,
 {
     std::fs::read_to_string(filename)
 }
 
-fn get_muls(instructions: String) -> Vec<(i32, i32)> {
-    let mul_pattern: Vec<char> = "mul(".chars().collect();
-    let do_pattern: Vec<char> = "do()".chars().collect();
-    let dont_pattern: Vec<char> = "don't()".chars().collect();
+fn find_num_end(instructions: &str, start: usize) -> usize {
+    instructions[start..]
+        .find(|c: char| !c.is_digit(10))
+        .map_or(instructions.len(), |rel_pos| start + rel_pos)
+}
 
+fn get_multiplications(instructions: &str) -> Vec<(i32, i32)> {
     let mut multiplications: Vec<(i32, i32)> = vec![];
-    let chars: Vec<char> = instructions.chars().collect();
+    let mut multiply = true;
 
     let mut i = 0;
 
-    let mut multiply = true;
-
-    while i < chars.len() {
-        if chars[i] == 'd' {
-            println!("encountered 'd' at {0}", i);
-
-            let mut j = i;
-
-            while j - i < do_pattern.len() && chars[j] == do_pattern[j - i] {
-                j += 1;
-            }
-
-            if (j - i) != do_pattern.len() {
-                j = i;
-
-                while j - i < dont_pattern.len() && chars[j] == dont_pattern[j - i] {
-                    j += 1;
-                }
-
-                if (j - i) != dont_pattern.len() {
-                    i = j;
-                    continue;
-                }
-
-                println!("got 'don't()' from {0} to {1}", i, j);
-                multiply = false;
-                i += 1;
-            } else {
-                println!("got 'do()' from {0} to {1}", i, j);
-                multiply = true;
-                i += 1;
-            }
-        } else if chars[i] == 'm' {
-            println!("encountered 'm' at {0}", i);
-
-            let mut j = i;
-
-            while j - i < mul_pattern.len() && chars[j] == mul_pattern[j - i] {
-                j += 1;
-            }
-
-            if (j - i) != mul_pattern.len() {
-                i = j;
+    while i < instructions.len() {
+        if instructions[i..].starts_with("do()") {
+            multiply = true;
+            i += "do()".len()
+        } else if instructions[i..].starts_with("don't()") {
+            multiply = false;
+            i += "don't()".len()
+        } else if instructions[i..].starts_with("mul(") {
+            let n1_start = i + "mul(".len();
+            let n1_end = find_num_end(instructions, n1_start);
+            if n1_end >= instructions.len() || instructions[n1_end..].chars().next() != Some(',') {
+                i = n1_end;
                 continue;
             }
 
-            println!("got 'mul(' from {0} to {1}", i, j);
-
-            let mut num1: Vec<char> = vec![];
-
-            while chars[j].is_digit(10) {
-                num1.push(chars[j]);
-                j += 1;
-            }
-
-            if num1.len() > 3 || chars[j] != ',' {
-                i = j;
+            let n2_start = n1_end + 1;
+            let n2_end = find_num_end(instructions, n2_start);
+            if n2_end >= instructions.len() || instructions[n2_end..].chars().next() != Some(')') {
+                i = n2_end;
                 continue;
             }
 
-            let n1 = num1.iter().collect::<String>().parse::<i32>();
-
-            if n1.is_err() {
-                i = j;
-                continue;
-            }
-
-            let n1 = n1.unwrap();
-
-            println!("got 'n1' {0}", n1);
-
-            j += 1;
-
-            let mut num2: Vec<char> = vec![];
-
-            while chars[j].is_digit(10) {
-                num2.push(chars[j]);
-                j += 1;
-            }
-
-            if num2.len() > 3 || chars[j] != ')' {
-                i = j;
-                continue;
-            }
-
-            let n2 = num2.iter().collect::<String>().parse::<i32>();
-
-            if n2.is_err() {
-                i = j;
-                continue;
-            }
-
-            let n2 = n2.unwrap();
-
-            println!("got 'n2' {0}", n2);
-
-            j += 1;
+            let n1 = instructions[n1_start..n1_end].parse::<i32>().unwrap_or(0);
+            let n2 = instructions[n2_start..n2_end].parse::<i32>().unwrap_or(0);
 
             if multiply {
                 multiplications.push((n1, n2));
             }
-
-            i = j;
+            i = n2_end + 1;
         } else {
             i += 1;
         }
@@ -129,9 +55,7 @@ fn get_muls(instructions: String) -> Vec<(i32, i32)> {
 }
 
 fn calc_result(multiplications: Vec<(i32, i32)>) -> i32 {
-    multiplications
-        .iter()
-        .fold(0, |acc, (n1, n2)| acc + (n1 * n2))
+    multiplications.iter().map(|(n1, n2)| n1 * n2).sum()
 }
 
 fn main() {
@@ -144,7 +68,7 @@ fn main() {
 
     println!("instructions: {0}", instructions);
 
-    let multiplications = get_muls(instructions);
+    let multiplications = get_multiplications(instructions.as_str());
 
     println!("multiplications: {:?}", multiplications);
 
