@@ -7,7 +7,7 @@ where
 
 fn find_num_end(instructions: &str, start: usize) -> usize {
     instructions[start..]
-        .find(|c: char| !c.is_digit(10))
+        .find(|c: char| !c.is_ascii_digit())
         .map_or(instructions.len(), |rel_pos| start + rel_pos)
 }
 
@@ -27,14 +27,14 @@ fn get_multiplications(instructions: &str) -> Vec<(i32, i32)> {
         } else if instructions[i..].starts_with("mul(") {
             let n1_start = i + "mul(".len();
             let n1_end = find_num_end(instructions, n1_start);
-            if n1_end >= instructions.len() || instructions[n1_end..].chars().next() != Some(',') {
+            if n1_end >= instructions.len() || !instructions[n1_end..].starts_with(',') {
                 i = n1_end;
                 continue;
             }
 
             let n2_start = n1_end + 1;
             let n2_end = find_num_end(instructions, n2_start);
-            if n2_end >= instructions.len() || instructions[n2_end..].chars().next() != Some(')') {
+            if n2_end >= instructions.len() || !instructions[n2_end..].starts_with(')') {
                 i = n2_end;
                 continue;
             }
@@ -60,19 +60,15 @@ fn calc_result(multiplications: Vec<(i32, i32)>) -> i32 {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-
     let filename = &args[1];
 
     let instructions =
         read_instructions(filename).expect("File exists, contains instructions to execute");
-
     println!("instructions: {0}", instructions);
 
     let multiplications = get_multiplications(instructions.as_str());
-
     println!("multiplications: {:?}", multiplications);
 
     let result = calc_result(multiplications);
-
     println!("result: {0}", result);
 }
