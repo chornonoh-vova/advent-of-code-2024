@@ -10,62 +10,61 @@ where
     std::fs::read_to_string(filename)
 }
 
-fn get_page_ordering(input: &str) -> HashMap<i32, HashSet<i32>> {
-    let mut ordering: HashMap<i32, HashSet<i32>> = HashMap::new();
+type PageOrdering = HashMap<i32, HashSet<i32>>;
+type PageUpdates = Vec<Vec<i32>>;
+
+fn get_page_ordering(input: &str) -> Result<PageOrdering, String> {
+    let mut ordering: PageOrdering = HashMap::new();
 
     let ordering_str = input
         .split_once("\n\n")
-        .expect("Input must contain page ordering information")
+        .ok_or("Input must contain page ordering information")?
         .0;
 
-    ordering_str.split("\n").for_each(|line| {
+    for line in ordering_str.lines() {
         let (page1, page2) = line
             .split_once("|")
-            .map(|(page1, page2)| (page1.parse::<i32>(), page2.parse::<i32>()))
-            .expect("Line to contain 2 pages");
+            .ok_or("Line must contain a | separator")?;
 
-        if page1.is_ok() && page2.is_ok() {
-            let page1 = page1.unwrap();
-            let page2 = page2.unwrap();
+        let page1 = page1.parse::<i32>().map_err(|_| "Invalid page number")?;
+        let page2 = page2.parse::<i32>().map_err(|_| "Invalid page number")?;
 
-            if !ordering.contains_key(&page2) {
-                ordering.insert(page2, HashSet::new());
-            }
+        ordering.entry(page2).or_default().insert(page1);
+    }
 
-            ordering.get_mut(&page2).unwrap().insert(page1);
-        }
-    });
-
-    ordering
+    Ok(ordering)
 }
 
-fn get_page_updates(input: &str) -> Vec<Vec<i32>> {
+fn get_page_updates(input: &str) -> Result<PageUpdates, String> {
     let page_updates_str = input
         .split_once("\n\n")
-        .expect("Input must contain page updates information")
+        .ok_or("Input must contain page updates information")?
         .1;
 
-    page_updates_str
-        .split("\n")
-        .map(|line| {
-            line.split(",")
-                .filter_map(|num_str| num_str.parse::<i32>().ok())
-                .collect()
-        })
-        .collect()
+    let mut page_updates = vec![];
+
+    for line in page_updates_str.lines() {
+        let page_update = line
+            .split(",")
+            .filter_map(|num_str| num_str.parse::<i32>().ok())
+            .collect();
+
+        page_updates.push(page_update);
+    }
+
+    Ok(page_updates)
 }
 
-fn is_valid_page_update(
-    page_update: &Vec<i32>,
-    page_ordering: &HashMap<i32, HashSet<i32>>,
-) -> bool {
+fn is_valid_page_update(page_update: &[i32], page_ordering: &PageOrdering) -> bool {
     let mut prev = HashSet::new();
 
     for page in page_update {
         if !prev.is_empty() {
-            let empty = HashSet::new();
-            let valid = page_ordering.get(page).unwrap_or(&empty);
-            if !valid.is_superset(&prev) {
+            let is_valid = page_ordering
+                .get(page)
+                .map(|v| v.is_superset(&prev))
+                .unwrap_or(false);
+            if !is_valid {
                 return false;
             }
         }
@@ -75,16 +74,12 @@ fn is_valid_page_update(
     true
 }
 
-fn sort_invalid_page_update(
-    page_update: &mut Vec<i32>,
-    page_ordering: &HashMap<i32, HashSet<i32>>,
-) {
+fn sort_invalid_page_update(page_update: &mut [i32], page_ordering: &PageOrdering) {
     page_update.sort_by(|a, b| {
-        let empty = HashSet::new();
-        if page_ordering.get(&b).unwrap_or(&empty).contains(a) {
+        if page_ordering.get(b).map(|o| o.contains(a)).unwrap_or(false) {
             return Ordering::Less;
         }
-        if page_ordering.get(&a).unwrap_or(&empty).contains(b) {
+        if page_ordering.get(a).map(|o| o.contains(b)).unwrap_or(false) {
             return Ordering::Greater;
         }
 
@@ -93,40 +88,40 @@ fn sort_invalid_page_update(
 }
 
 fn bucket_page_updates(
-    page_updates: &Vec<Vec<i32>>,
-    page_ordering: &HashMap<i32, HashSet<i32>>,
+    page_updates: &[Vec<i32>],
+    page_ordering: &PageOrdering,
 ) -> (Vec<Vec<i32>>, Vec<Vec<i32>>) {
     let mut valid = vec![];
     let mut invalid = vec![];
 
-    for page_update in page_updates {
-        if is_valid_page_update(page_update, page_ordering) {
-            valid.push(page_update.clone());
+    for page_update in page_updates.iter().cloned() {
+        if is_valid_page_update(&page_update, page_ordering) {
+            valid.push(page_update);
         } else {
-            invalid.push(page_update.clone());
+            invalid.push(page_update);
         }
     }
 
     (valid, invalid)
 }
 
-fn get_middles_sum(page_updates: &Vec<Vec<i32>>) -> i32 {
+fn get_middles_sum(page_updates: &[Vec<i32>]) -> i32 {
     page_updates
-        .into_iter()
-        .map(|page_update| page_update[page_update.len() / 2])
+        .iter()
+        .map(|page_update| page_update.get(page_update.len() / 2).unwrap_or(&0))
         .sum()
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     let filename = &args[1];
 
-    let input = read_input(filename).expect("File to contain input");
+    let input = read_input(filename).map_err(|e| e.to_string())?;
 
-    let page_ordering = get_page_ordering(&input);
+    let page_ordering = get_page_ordering(&input)?;
     println!("page ordering: {:?}", page_ordering);
 
-    let page_updates = get_page_updates(&input);
+    let page_updates = get_page_updates(&input)?;
     println!("page_updates: {:?}", page_updates);
 
     let (valid_page_updates, mut invalid_page_updates) =
@@ -143,5 +138,7 @@ fn main() {
     println!("valid middles sum: {}", valid_middles_sum);
 
     let invalid_middles_sum = get_middles_sum(&invalid_page_updates);
-    println!("invalid middles sum: {}", invalid_middles_sum)
+    println!("invalid middles sum: {}", invalid_middles_sum);
+
+    Ok(())
 }
