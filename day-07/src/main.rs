@@ -1,50 +1,69 @@
-use std::str::FromStr;
+use std::collections::HashMap;
 
-struct CalibrationEquation {
-    pub test_value: usize,
-    pub nums: Vec<usize>,
+#[derive(Debug)]
+enum CalibrationError {
+    ParseError(String),
+    UnsupportedOperatorError,
 }
 
-impl FromStr for CalibrationEquation {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (test_value_str, nums_str) = s.split_once(": ").ok_or("No : delimiter")?;
-
-        let test_value = test_value_str
-            .parse::<usize>()
-            .map_err(|_| "Failed to parse test_value")?;
-
-        let nums = nums_str
-            .split(" ")
-            .filter_map(|num_str| num_str.parse::<usize>().ok())
-            .collect();
-
-        Ok(Self { test_value, nums })
+impl std::fmt::Display for CalibrationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ParseError(e) => write!(f, "ParseError: {}", e),
+            Self::UnsupportedOperatorError => write!(f, "UnsupportedOperatorError"),
+        }
     }
 }
 
-impl CalibrationEquation {
-    fn calculate(&self, operators: &[char]) -> usize {
-        println!("calculating {:?} {:?}", self.nums, operators);
-        let mut result = self.nums[0];
+impl std::error::Error for CalibrationError {}
 
-        for i in 1..self.nums.len() {
-            match operators[i - 1] {
-                '+' => result += self.nums[i],
-                '*' => result *= self.nums[i],
-                '|' => {
-                    result = (result.to_string() + self.nums[i].to_string().as_str())
-                        .parse::<usize>()
-                        .unwrap()
-                }
-                _ => panic!("Unsupported operator"),
-            }
+struct CalibrationEquation {
+    test_value: u64,
+    nums: Vec<u64>,
+}
+
+impl CalibrationEquation {
+    fn calculate(&self, operators: &[char]) -> Result<u64, CalibrationError> {
+        assert_eq!(operators.len(), self.nums.len() - 1);
+
+        let mut res = self.nums[0];
+
+        for (i, &op) in operators.iter().enumerate() {
+            let next = self.nums[i + 1];
+            res = match op {
+                '+' => res + next,
+                '*' => res * next,
+                '|' => res * 10_u64.pow((next as f64).log10().ceil() as u32) + next,
+                _ => return Err(CalibrationError::UnsupportedOperatorError),
+            };
         }
 
-        println!("result: {}", result);
+        Ok(res)
+    }
+}
 
-        result
+impl std::str::FromStr for CalibrationEquation {
+    type Err = CalibrationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (test_value_str, nums_str) = s
+            .split_once(": ")
+            .ok_or(CalibrationError::ParseError("No : delimiter".to_string()))?;
+
+        let test_value = test_value_str.parse::<u64>().map_err(|_| {
+            CalibrationError::ParseError(format!("Failed to parse test_value {}", test_value_str))
+        })?;
+
+        let nums: Vec<u64> = nums_str
+            .split_whitespace()
+            .map(|num_str| {
+                num_str.parse::<u64>().map_err(|_| {
+                    CalibrationError::ParseError(format!("Invalid number: {}", num_str))
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self { test_value, nums })
     }
 }
 
@@ -55,47 +74,70 @@ where
     std::fs::read_to_string(filename)
 }
 
-fn generate_operators(operators: &mut Vec<Vec<char>>, prefix: Vec<char>, length: usize) {
-    if prefix.len() == length {
-        operators.push(prefix);
-        return;
-    }
-
-    let mut left = prefix.clone();
-    left.push('+');
-    generate_operators(operators, left, length);
-
-    let mut middle = prefix.clone();
-    middle.push('|');
-    generate_operators(operators, middle, length);
-
-    let mut right = prefix;
-    right.push('*');
-    generate_operators(operators, right, length);
+struct OperatorsCache {
+    cache: HashMap<usize, Vec<Vec<char>>>,
 }
 
-fn main() -> Result<(), String> {
-    let args: Vec<String> = std::env::args().collect();
-    let filename = &args[1];
+const VALID_OPERATORS: [char; 3] = ['+', '|', '*'];
 
-    let input = read_input(filename).map_err(|_| "Failed to read file")?;
-
-    let mut res = 0;
-
-    for line in input.lines() {
-        let equation = line.parse::<CalibrationEquation>()?;
-        let mut operators: Vec<Vec<char>> = Vec::new();
-        generate_operators(&mut operators, Vec::new(), equation.nums.len() - 1);
-
-        for op in operators {
-            if equation.calculate(&op) == equation.test_value {
-                res += equation.test_value;
-                break;
-            }
+impl OperatorsCache {
+    fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
         }
     }
 
-    println!("total calibration result: {}", res);
+    fn get(&mut self, length: usize) -> &[Vec<char>] {
+        self.cache.entry(length).or_insert_with(|| {
+            let mut operators = Vec::with_capacity(VALID_OPERATORS.len().pow(length as u32));
+            let mut prefix = vec![];
+            generate_operators(&mut operators, &mut prefix, length);
+
+            operators
+        })
+    }
+}
+
+fn generate_operators(operators: &mut Vec<Vec<char>>, prefix: &mut Vec<char>, length: usize) {
+    if prefix.len() == length {
+        operators.push(prefix.clone());
+        return;
+    }
+
+    for op in VALID_OPERATORS {
+        prefix.push(op);
+        generate_operators(operators, prefix, length);
+        prefix.pop();
+    }
+}
+
+fn total_calibration(input: &str) -> Result<u64, CalibrationError> {
+    let mut op_cache = OperatorsCache::new();
+
+    input
+        .lines()
+        .map(|line| {
+            let equation = line.parse::<CalibrationEquation>()?;
+
+            for operators in op_cache.get(equation.nums.len() - 1) {
+                if equation.test_value == equation.calculate(operators)? {
+                    return Ok(equation.test_value);
+                }
+            }
+
+            Ok(0)
+        })
+        .sum()
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().collect();
+    let filename = &args[1];
+
+    let input = read_input(filename)?;
+
+    let result = total_calibration(&input)?;
+    println!("total calibration result: {}", result);
 
     Ok(())
 }
