@@ -68,12 +68,9 @@ fn count_guard(lab_map: &[Vec<char>]) -> (usize, usize) {
 
         if !obstructions.contains(&next) {
             let cache_key = (curr_pos, curr_dir);
-            if !loop_cache.contains_key(&cache_key) {
-                loop_cache.insert(
-                    cache_key,
-                    check_for_loop(&curr_pos, curr_dir, lab_map, rows, cols),
-                );
-            }
+            loop_cache
+                .entry(cache_key)
+                .or_insert_with(|| check_for_loop(&curr_pos, curr_dir, lab_map, rows, cols));
 
             if *loop_cache.get(&cache_key).unwrap() {
                 obstructions.insert(next);
