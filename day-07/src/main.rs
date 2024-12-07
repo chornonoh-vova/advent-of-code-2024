@@ -23,12 +23,12 @@ struct CalibrationEquation {
 }
 
 impl CalibrationEquation {
-    fn calculate(&self, operators: &[char]) -> Result<u64, CalibrationError> {
+    fn calculate(&self, operators: &str) -> Result<u64, CalibrationError> {
         assert_eq!(operators.len(), self.nums.len() - 1);
 
         let mut res = self.nums[0];
 
-        for (i, &op) in operators.iter().enumerate() {
+        for (i, op) in operators.chars().enumerate() {
             let next = self.nums[i + 1];
             res = match op {
                 '+' => res + next,
@@ -75,7 +75,7 @@ where
 }
 
 struct OperatorsCache {
-    cache: HashMap<usize, Vec<Vec<char>>>,
+    cache: HashMap<usize, Vec<String>>,
 }
 
 const VALID_OPERATORS: [char; 3] = ['+', '|', '*'];
@@ -87,10 +87,10 @@ impl OperatorsCache {
         }
     }
 
-    fn get(&mut self, length: usize) -> &[Vec<char>] {
+    fn get(&mut self, length: usize) -> &[String] {
         self.cache.entry(length).or_insert_with(|| {
             let mut operators = Vec::with_capacity(VALID_OPERATORS.len().pow(length as u32));
-            let mut prefix = vec![];
+            let mut prefix = String::from("");
             generate_operators(&mut operators, &mut prefix, length);
 
             operators
@@ -98,7 +98,7 @@ impl OperatorsCache {
     }
 }
 
-fn generate_operators(operators: &mut Vec<Vec<char>>, prefix: &mut Vec<char>, length: usize) {
+fn generate_operators(operators: &mut Vec<String>, prefix: &mut String, length: usize) {
     if prefix.len() == length {
         operators.push(prefix.clone());
         return;
