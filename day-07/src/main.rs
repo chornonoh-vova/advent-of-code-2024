@@ -33,7 +33,7 @@ impl CalibrationEquation {
             res = match op {
                 '+' => res + next,
                 '*' => res * next,
-                '|' => res * 10_u64.pow((next as f64).log10().ceil() as u32) + next,
+                '|' => res * 10_u64.pow(next.ilog10() + 1) + next,
                 _ => return Err(CalibrationError::UnsupportedOperatorError),
             };
         }
