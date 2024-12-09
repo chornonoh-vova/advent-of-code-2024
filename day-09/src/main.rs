@@ -5,7 +5,7 @@ where
     std::fs::read_to_string(filename)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Block {
     File(usize),
     Empty,
@@ -21,33 +21,26 @@ fn get_disk_repr(disk_map: &str) -> Result<(Vec<Block>, Vec<File>), String> {
     let mut repr = vec![];
     let mut files = vec![];
 
-    let mut is_file = true;
+    let mut is_file = [true, false].iter().cycle();
     let mut i = 0;
 
     for ch in disk_map.chars() {
         let n = ch
             .to_digit(10)
-            .ok_or(format!("Unknown block length {}", ch))?;
+            .ok_or_else(|| format!("Unknown block length {}", ch))? as usize;
 
-        if is_file {
+        let is_file = is_file.next().unwrap();
+
+        if *is_file {
             files.push(File {
                 start: repr.len(),
-                size: n as usize,
+                size: n,
             });
-        }
-
-        for _ in 0..n {
-            match is_file {
-                true => repr.push(Block::File(i)),
-                false => repr.push(Block::Empty),
-            };
-        }
-
-        if is_file {
+            repr.extend([Block::File(i)].repeat(n));
             i += 1;
+        } else {
+            repr.extend([Block::Empty].repeat(n));
         }
-
-        is_file = !is_file;
     }
 
     Ok((repr, files))
@@ -55,38 +48,35 @@ fn get_disk_repr(disk_map: &str) -> Result<(Vec<Block>, Vec<File>), String> {
 
 fn find_free_span(disk_repr: &[Block], start: usize) -> (usize, usize) {
     let mut i = start;
-    let mut size = 0;
 
-    while i < disk_repr.len() && disk_repr[i] != Block::Empty {
+    while i < disk_repr.len() {
+        if disk_repr[i] == Block::Empty {
+            let start = i;
+            while i < disk_repr.len() && disk_repr[i] == Block::Empty {
+                i += 1;
+            }
+            return (start, i - start);
+        }
         i += 1;
     }
 
-    while i + size < disk_repr.len() && disk_repr[i + size] == Block::Empty {
-        size += 1;
-    }
-
-    (i, size)
+    (disk_repr.len(), 0)
 }
 
 fn compact(disk_repr: &mut [Block], files: &[File]) {
-    for curr_file in files.iter().rev() {
-        let (mut free_span_start, mut free_span_size) = find_free_span(disk_repr, 0);
+    for file in files.iter().rev() {
+        let (mut free_start, mut free_size) = find_free_span(disk_repr, 0);
 
-        while free_span_start + free_span_size < disk_repr.len() && free_span_size < curr_file.size
-        {
-            (free_span_start, free_span_size) =
-                find_free_span(disk_repr, free_span_start + free_span_size);
+        while free_start + free_size < disk_repr.len() && free_size < file.size {
+            (free_start, free_size) = find_free_span(disk_repr, free_start + free_size);
         }
 
-        if free_span_start != disk_repr.len()
-            && free_span_size >= curr_file.size
-            && free_span_start < curr_file.start
-        {
-            let mut i = free_span_start;
-            let mut j = curr_file.start;
-            println!("free span: {} + {}", i, free_span_size);
+        if free_start != disk_repr.len() && free_size >= file.size && free_start < file.start {
+            let mut i = free_start;
+            let mut j = file.start;
+            println!("free span: {} + {}", i, free_size);
 
-            while j < curr_file.start + curr_file.size {
+            while j < file.start + file.size {
                 println!("swapping {} with {}", i, j);
                 disk_repr.swap(i, j);
                 i += 1;
@@ -97,26 +87,24 @@ fn compact(disk_repr: &mut [Block], files: &[File]) {
 }
 
 fn checksum(disk_repr: &[Block]) -> usize {
-    let mut sum = 0;
-
-    for (i, block) in disk_repr.iter().enumerate() {
-        match block {
-            Block::File(id) => sum += i * id,
-            _ => {}
-        }
-    }
-
-    sum
+    disk_repr
+        .iter()
+        .enumerate()
+        .fold(0, |acc, (i, block)| match block {
+            Block::File(id) => acc + i * id,
+            Block::Empty => acc,
+        })
 }
 
 fn print_disk_repr(disk_repr: &[Block]) {
-    for el in disk_repr {
-        match el {
-            Block::File(file_id) => print!("{}", file_id),
-            Block::Empty => print!("."),
-        }
-    }
-    print!("\n");
+    let repr: String = disk_repr
+        .iter()
+        .map(|block| match block {
+            Block::File(id) => id.to_string(),
+            Block::Empty => ".".to_string(),
+        })
+        .collect();
+    println!("{}", repr);
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
