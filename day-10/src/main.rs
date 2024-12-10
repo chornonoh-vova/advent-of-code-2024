@@ -1,3 +1,5 @@
+type Position = (i32, i32);
+
 fn read_input<P>(filename: P) -> std::io::Result<String>
 where
     P: AsRef<std::path::Path>,
@@ -10,13 +12,19 @@ fn parse_map(input: &str) -> Vec<Vec<i32>> {
         .lines()
         .map(|line| {
             line.chars()
-                .map(|ch| ch.to_digit(10).unwrap() as i32)
+                .map(|ch| {
+                    if ch.is_ascii_digit() {
+                        ch.to_digit(10).unwrap_or(0) as i32
+                    } else {
+                        -1
+                    }
+                })
                 .collect()
         })
         .collect()
 }
 
-fn find_trailheads(map: &[Vec<i32>]) -> Vec<(i32, i32)> {
+fn find_trailheads(map: &[Vec<i32>]) -> Vec<Position> {
     let mut trailheads = vec![];
 
     for (i, row) in map.iter().enumerate() {
@@ -32,7 +40,7 @@ fn find_trailheads(map: &[Vec<i32>]) -> Vec<(i32, i32)> {
 
 const DIRECTIONS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
 
-fn trace_trailhead(map: &[Vec<i32>], scores: &mut Vec<(i32, i32)>, curr: &(i32, i32), height: i32) {
+fn trace_trailhead(map: &[Vec<i32>], scores: &mut Vec<Position>, curr: &Position, height: i32) {
     if height == 9 {
         scores.push(*curr);
         return;
@@ -56,15 +64,15 @@ fn trace_trailhead(map: &[Vec<i32>], scores: &mut Vec<(i32, i32)>, curr: &(i32, 
     }
 }
 
-fn trailhead_score(map: &[Vec<i32>], start: &(i32, i32)) -> usize {
-    let mut scores: Vec<(i32, i32)> = vec![];
+fn trailhead_score(map: &[Vec<i32>], start: &Position) -> usize {
+    let mut scores: Vec<Position> = vec![];
 
     trace_trailhead(map, &mut scores, start, 0);
 
     scores.len()
 }
 
-fn trailhead_scores(map: &[Vec<i32>], trailheads: &[(i32, i32)]) -> Vec<usize> {
+fn trailhead_scores(map: &[Vec<i32>], trailheads: &[Position]) -> Vec<usize> {
     trailheads
         .iter()
         .map(|trailhead| trailhead_score(map, trailhead))
