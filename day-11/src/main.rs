@@ -29,6 +29,7 @@ fn split_number(n: u64) -> (u64, u64) {
 
 fn transform_stones(stones: &mut HashMap<u64, u64>) {
     let mut new_stones = HashMap::with_capacity(stones.len() * 2);
+
     for (&stone, &n) in stones.iter() {
         if stone == 0 {
             *new_stones.entry(1).or_insert(0) += n;
