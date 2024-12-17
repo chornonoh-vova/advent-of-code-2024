@@ -62,7 +62,7 @@ impl Computer {
     }
 
     fn bxc(&mut self) {
-        self.registers[1] = self.registers[1] ^ self.registers[2];
+        self.registers[1] ^= self.registers[2];
         self.pointer += 2;
     }
 
@@ -143,15 +143,15 @@ fn parse_input(s: &str) -> Result<([i64; 3], Vec<i64>), String> {
 }
 
 fn part1(input: &str) {
-    let (registers, program) = parse_input(&input).expect("Failed to parse input");
-    let mut computer = Computer::new(registers.clone(), program.clone());
+    let (registers, program) = parse_input(input).expect("Failed to parse input");
+    let mut computer = Computer::new(registers, program.clone());
     computer.run();
     let output = computer.output();
     println!("part 1: {}", output);
 }
 
 fn part2(input: &str) {
-    let (registers, program) = parse_input(&input).expect("Failed to parse input");
+    let (registers, program) = parse_input(input).expect("Failed to parse input");
 
     let mut valid = vec![0];
 
