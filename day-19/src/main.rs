@@ -2,14 +2,14 @@ use std::{borrow::Cow, collections::HashMap};
 
 struct Combinator<'a> {
     patterns: Vec<Cow<'a, str>>,
-    possible: HashMap<&'a str, usize>,
+    cache: HashMap<&'a str, usize>,
 }
 
 impl<'a> Combinator<'a> {
     fn new(patterns: Vec<String>) -> Self {
         let patterns = patterns.into_iter().map(Cow::Owned).collect();
-        let possible = HashMap::new();
-        Self { patterns, possible }
+        let cache = HashMap::new();
+        Self { patterns, cache }
     }
 
     fn count_possible(&mut self, design: &'a str) -> usize {
@@ -17,7 +17,7 @@ impl<'a> Combinator<'a> {
             return 1;
         }
 
-        if let Some(&possible) = self.possible.get(design) {
+        if let Some(&possible) = self.cache.get(design) {
             return possible;
         }
 
@@ -31,8 +31,22 @@ impl<'a> Combinator<'a> {
             }
         }
 
-        self.possible.insert(design, count_possible);
+        self.cache.insert(design, count_possible);
         count_possible
+    }
+
+    fn count_possible_designs(&mut self, designs: &[&'a str]) -> usize {
+        designs
+            .iter()
+            .filter(|design| self.count_possible(design) != 0)
+            .count()
+    }
+
+    fn count_possible_design_ways(&mut self, designs: &[&'a str]) -> usize {
+        designs
+            .iter()
+            .map(|design| self.count_possible(design))
+            .sum()
     }
 }
 
@@ -45,20 +59,6 @@ fn parse_input(input: &str) -> (Vec<String>, Vec<String>) {
     (patterns, designs)
 }
 
-fn count_possible<'a>(designs: &[&'a str], comb: &mut Combinator<'a>) -> usize {
-    designs
-        .iter()
-        .filter(|design| comb.count_possible(design) != 0)
-        .count()
-}
-
-fn count_possible_ways<'a>(designs: &[&'a str], comb: &mut Combinator<'a>) -> usize {
-    designs
-        .iter()
-        .map(|design| comb.count_possible(design))
-        .sum()
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let filename = &args[1];
@@ -68,9 +68,12 @@ fn main() {
     let designs: Vec<&str> = designs.iter().map(String::as_str).collect();
     let mut comb = Combinator::new(patterns);
 
-    println!("possible count: {}", count_possible(&designs, &mut comb));
     println!(
-        "possible ways count: {}",
-        count_possible_ways(&designs, &mut comb)
+        "possible designs count: {}",
+        comb.count_possible_designs(&designs)
+    );
+    println!(
+        "possible design ways count: {}",
+        comb.count_possible_design_ways(&designs)
     );
 }
