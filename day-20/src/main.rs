@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
+type PointSet = HashSet<Point>;
+type CheatMap = BTreeMap<i32, Vec<(Point, Point)>>;
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Point {
     row: i32,
@@ -13,6 +16,21 @@ impl Point {
             col: col as i32,
         }
     }
+
+    fn manhattan_distance(&self, other: &Point) -> i32 {
+        (self.row - other.row).abs() + (self.col - other.col).abs()
+    }
+}
+
+impl std::ops::Add<(i32, i32)> for Point {
+    type Output = Self;
+
+    fn add(self, rhs: (i32, i32)) -> Self::Output {
+        Self {
+            row: self.row + rhs.0,
+            col: self.col + rhs.1,
+        }
+    }
 }
 
 impl Default for Point {
@@ -23,7 +41,7 @@ impl Default for Point {
 
 #[derive(Debug)]
 struct RaceTrack {
-    walls: HashSet<Point>,
+    walls: PointSet,
     start: Point,
     end: Point,
     size: i32,
@@ -59,7 +77,7 @@ impl RaceTrack {
         }
     }
 
-    fn find_path(&self) -> (BTreeMap<usize, Point>, HashMap<Point, usize>) {
+    fn find_path(&self) -> (Vec<Point>, HashMap<Point, i32>) {
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
         let mut prev = HashMap::new();
@@ -69,23 +87,24 @@ impl RaceTrack {
 
         while let Some((curr, dist)) = queue.pop_front() {
             if curr == self.end {
-                let mut path = BTreeMap::new();
                 let mut path_points = HashMap::new();
+                let mut path = Vec::new();
                 let mut trace = Some(curr);
                 let mut step = dist;
                 while let Some(p) = trace {
-                    path.insert(step, p);
                     path_points.insert(p, step);
+                    path.push(p);
                     trace = prev.get(&p).cloned();
                     if trace.is_some() {
                         step -= 1;
                     }
                 }
+                path.reverse();
                 return (path, path_points);
             }
 
             for neighbor in self.neighbors(&curr) {
-                if visited.insert(neighbor) && !self.walls.contains(&neighbor) {
+                if visited.insert(neighbor) && !self.is_wall(&neighbor) {
                     prev.insert(neighbor, curr);
                     queue.push_back((neighbor, dist + 1));
                 }
@@ -97,21 +116,21 @@ impl RaceTrack {
 
     fn find_cheats(
         &self,
-        path: &BTreeMap<usize, Point>,
-        path_points: &HashMap<Point, usize>,
-    ) -> BTreeMap<usize, Vec<(Point, Point)>> {
+        path: &[Point],
+        path_points: &HashMap<Point, i32>,
+        max_len: i32,
+    ) -> CheatMap {
         let mut cheats = BTreeMap::new();
 
-        for (&dist, point) in path {
-            for (cheat_start, cheat_end, cheat_len) in self.neighbor_cheats(point) {
-                if let Some(&next_dist) = path_points.get(&cheat_end) {
-                    if next_dist > dist {
+        for (dist, &point) in path.iter().enumerate() {
+            for next_point in self.manhattan_circle(&point, max_len) {
+                if let Some(&next_dist) = path_points.get(&next_point) {
+                    let saved = next_dist - dist as i32 - point.manhattan_distance(&next_point);
+                    if saved > 0 {
                         cheats
-                            .entry(next_dist - dist - cheat_len)
-                            .and_modify(|e: &mut Vec<(Point, Point)>| {
-                                e.push((cheat_start, cheat_end))
-                            })
-                            .or_insert_with(|| vec![(cheat_start, cheat_end)]);
+                            .entry(saved)
+                            .or_insert_with(Vec::new)
+                            .push((point, next_point));
                     }
                 }
             }
@@ -120,44 +139,40 @@ impl RaceTrack {
         cheats
     }
 
-    fn neighbors(&self, p: &Point) -> Vec<Point> {
+    fn neighbors(&self, p: &Point) -> PointSet {
         [(-1, 0), (0, 1), (1, 0), (0, -1)]
             .iter()
-            .map(|d| Point {
-                row: p.row + d.0,
-                col: p.col + d.1,
-            })
-            .filter(|p| p.row >= 0 && p.col >= 0 && p.row < self.size && p.col < self.size)
+            .map(|&d| *p + d)
+            .filter(|p| self.is_in_bounds(p))
             .collect()
     }
 
-    fn neighbor_cheats(&self, p: &Point) -> Vec<(Point, Point, usize)> {
-        [
-            ((-1, 0), (-2, 0)),
-            ((0, 1), (0, 2)),
-            ((1, 0), (2, 0)),
-            ((0, -1), (0, -2)),
-        ]
-        .iter()
-        .map(|(d1, d2)| {
-            (
-                Point {
-                    row: p.row + d1.0,
-                    col: p.col + d1.1,
-                },
-                Point {
-                    row: p.row + d2.0,
-                    col: p.col + d2.1,
-                },
-                2,
-            )
-        })
-        .filter(|(p1, p2, _)| self.walls.contains(p1) && !self.walls.contains(p2))
-        .collect()
+    fn is_in_bounds(&self, p: &Point) -> bool {
+        p.row >= 0 && p.col >= 0 && p.row < self.size && p.col < self.size
+    }
+
+    fn is_wall(&self, p: &Point) -> bool {
+        self.walls.contains(p)
+    }
+
+    fn manhattan_circle(&self, start: &Point, diameter: i32) -> PointSet {
+        let mut points = HashSet::new();
+
+        for drow in -diameter..=diameter {
+            let remaining = diameter - drow.abs();
+            for dcol in -remaining..=remaining {
+                let point = *start + (drow, dcol);
+                if self.is_in_bounds(&point) && !self.is_wall(&point) {
+                    points.insert(point);
+                }
+            }
+        }
+
+        points
     }
 }
 
-fn print_cheats(cheats: &BTreeMap<usize, Vec<(Point, Point)>>, threshold: usize) {
+fn print_cheats(cheats: &CheatMap, threshold: i32) {
     let mut above_threshold = 0;
     println!("Threshold: {}", threshold);
     for cheat in cheats {
@@ -173,10 +188,13 @@ fn print_cheats(cheats: &BTreeMap<usize, Vec<(Point, Point)>>, threshold: usize)
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let filename = &args[1];
-    let threshold = &args[2].parse::<usize>().expect("Failed to parse threshold");
+    let max_cheat_len = &args[2]
+        .parse::<i32>()
+        .expect("Failed to parse max cheat length");
+    let threshold = &args[3].parse::<i32>().expect("Failed to parse threshold");
     let input = std::fs::read_to_string(filename).expect("Failed to read file");
     let racetrack = RaceTrack::new(&input);
     let (path, path_points) = racetrack.find_path();
-    let cheats = racetrack.find_cheats(&path, &path_points);
+    let cheats = racetrack.find_cheats(&path, &path_points, *max_cheat_len);
     print_cheats(&cheats, *threshold);
 }
