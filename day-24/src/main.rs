@@ -118,8 +118,6 @@ fn get_output(input: &str) -> usize {
         .collect();
     out_wires.sort_by_key(|(k, _)| k.clone());
 
-    println!("{:?}", out_wires);
-
     let mut out = 0;
     let mut mult = 1;
 
@@ -133,59 +131,64 @@ fn get_output(input: &str) -> usize {
     out
 }
 
+const LAST_OUT: &str = "z45";
+const FIRST_IN1: &str = "x00";
+const FIRST_IN2: &str = "y00";
+
 fn get_wires_to_swap(input: &str) -> String {
     let (_, gates) = parse_input(input);
     let mut edges: HashMap<String, Vec<String>> = HashMap::new();
 
-    for gate in &gates {
-        edges
-            .entry(gate.in1.clone())
-            .or_default()
-            .push(gate.out.clone());
-        edges
-            .entry(gate.in2.clone())
-            .or_default()
-            .push(gate.out.clone());
+    for Gate {
+        in1,
+        in2,
+        op: _,
+        out,
+    } in &gates
+    {
+        edges.entry(in1.clone()).or_default().push(out.clone());
+        edges.entry(in2.clone()).or_default().push(out.clone());
     }
 
     let mut broken_nodes = HashSet::new();
 
-    for g in &gates {
+    for Gate { in1, in2, op, out } in &gates {
         // z nodes must be XOR (except for the last one, z45)
-        if g.out.starts_with("z") && g.out != "z45" && g.op != GateOp::Xor {
-            broken_nodes.insert(g.out.clone());
+        if out.starts_with("z") && *out != LAST_OUT && *op != GateOp::Xor {
+            broken_nodes.insert(out.clone());
         }
         // z nodes must not be inputs of other nodes
-        if g.in1.starts_with("z") {
-            broken_nodes.insert(g.in1.clone());
+        if in1.starts_with("z") {
+            broken_nodes.insert(in1.clone());
         }
-        if g.in2.starts_with("z") {
-            broken_nodes.insert(g.in2.clone());
+        if in2.starts_with("z") {
+            broken_nodes.insert(in2.clone());
         }
 
         // inputs of XOR nodes (except for z nodes) must be x and y nodes
-        if g.op == GateOp::Xor
-            && !g.out.starts_with("z")
-            && !((g.in1.starts_with("x") && g.in2.starts_with("y"))
-                || (g.in1.starts_with("y") && g.in2.starts_with("x")))
+        if *op == GateOp::Xor
+            && !out.starts_with("z")
+            && !((in1.starts_with("x") && in2.starts_with("y"))
+                || (in1.starts_with("y") && in2.starts_with("x")))
         {
-            broken_nodes.insert(g.out.clone());
+            broken_nodes.insert(out.clone());
         }
 
         // XOR nodes (except z nodes) must always be input of exactly two
         // other nodes
-        if g.op == GateOp::Xor && !g.out.starts_with("z") && edges[&g.out].len() != 2 {
-            broken_nodes.insert(g.out.clone());
+        if *op == GateOp::Xor && !out.starts_with("z") && edges[out].len() != 2 {
+            broken_nodes.insert(out.clone());
         }
 
         // AND nodes must always be input of exactly one other node (except
         // the very first one wired to x00 and y00)
-        if g.op == GateOp::And
-            && !g.out.starts_with("z")
-            && edges[&g.out].len() != 1
-            && !((g.in1 == "x00" && g.in2 == "y00") || (g.in1 == "y00" && g.in2 == "x00"))
+        if *op == GateOp::And
+            && !out.starts_with("z")
+            && edges[out].len() != 1
+            && !((*in1 == FIRST_IN1 && *in2 == FIRST_IN2)
+                || (*in1 == FIRST_IN2 && *in2 == FIRST_IN1))
         {
-            broken_nodes.insert(g.out.clone());
+            broken_nodes.insert(out.clone());
         }
     }
 
