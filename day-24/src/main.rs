@@ -10,7 +10,7 @@ enum GateOp {
     Xor,
 }
 
-impl std::str::FromStr for GateOp {
+impl FromStr for GateOp {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

@@ -1,13 +1,16 @@
 use std::collections::{HashMap, VecDeque};
 
+#[inline]
 fn last_digit(num: i64) -> i64 {
     num % 10
 }
 
+#[inline]
 fn mix(num: i64, secret: i64) -> i64 {
     num ^ secret
 }
 
+#[inline]
 fn prune(num: i64) -> i64 {
     num % 16777216
 }
